@@ -1,0 +1,58 @@
+#!/usr/bin/env nextflow
+
+
+Channel.fromFilePairs( params.in ).into { fastq_files; fastq_files2 }
+mpa_db = file(params.mpa_db)
+params.rarespacing = "$baseDir/rarefractspacing.txt"
+spacinglist = Channel.fromPath( params.rarespacing ).splitText(){ it.trim() }
+
+println """\
+         M E T A P H L A N     NEXTFLOW      PIPELINE   
+         =====================================================
+         input reads (--in)                  : ${params.in}
+         outdir (--out)                      : ${params.out}
+         Metaphlan Database (--mpa_db)       : ${params.mpa_db}
+         Rarefraction spacing (--raraspacing): ${params.rarespacing} 
+
+         """
+         .stripIndent()
+
+
+
+process seqtk_subset {
+
+    //errorStrategy 'ignore'
+    publishDir params.out, mode: 'copy', overwrite: true
+    memory '2 GB'
+    cpus 1
+    input:
+    tuple val(name), file(fastq) from fastq_files2.first()
+    val(spacing) from spacinglist
+    output:
+    tuple val(name), val(spacing), file("*.fastq") into seqtk_subset_out
+
+    """
+    seqtk sample -s100 ${fastq[0]} ${spacing} > ${name}_R1_${spacing}.fastq
+    seqtk sample -s100 ${fastq[1]} ${spacing} > ${name}_R2_${spacing}.fastq
+    """
+}
+
+
+
+process mpa_fastq {
+
+    //errorStrategy 'ignore'
+    publishDir params.out, mode: 'copy', overwrite: true
+    memory '8 GB'
+    cpus 4
+    input:
+    tuple val(name), val(spacing), file(fastq) from seqtk_subset_out
+
+    output:
+    file("*.txt") into mpa_fastq_out
+
+    """
+    metaphlan ${fastq[0]},${fastq[1]} --input_type fastq --bowtie2out ${name}_${spacing}.bowtie2.bz2 -o ${name}_${spacing}.txt --index mpa_v30_CHOCOPhlAn_201901 --bowtie2db ${mpa_db} -t rel_ab_w_read_stats
+    """
+}
+

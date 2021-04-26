@@ -15,7 +15,7 @@ println """\
          .stripIndent()
 
 
-process seqtk {
+process seqtk_trim {
     
     //errorStrategy 'ignore'
     publishDir params.out, pattern: "*.fastq", mode: 'copy', overwrite: true
